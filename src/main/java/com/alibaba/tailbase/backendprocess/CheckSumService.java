@@ -136,7 +136,7 @@ public class CheckSumService implements Runnable{
                 LOGGER.warn("suc to sendCheckSum, result:" + result);
                 return true;
             }
-            LOGGER.warn("fail to sendCheckSum:" + response.message());
+            LOGGER.warn("fail to sendCheckSum:(" + url + ")" + response.message());
             response.close();
             return false;
         } catch (Exception e) {

@@ -79,10 +79,12 @@ public class Utils {
     
     public static String getPath(){
         String port = Constants.CURRENT_PORT;
+        int targetPort = CommonController.getDataSourcePort();
+        targetPort = 8080;											//temp fix for local testing. need to remove when submit
         if ("8000".equals(port)) {
-            return "http://localhost:" + CommonController.getDataSourcePort() + "/trace1.data";
+            return "http://localhost:" + targetPort + "/trace1.data";
         } else if ("8001".equals(port)){
-            return "http://localhost:" + CommonController.getDataSourcePort() + "/trace2.data";
+            return "http://localhost:" + targetPort + "/trace2.data";
         } else {
             return null;
         }
