@@ -25,7 +25,8 @@ public class ClientSendWrongTraceID {
 	
 	@Async("asyncClientSendWrongTraceIdExecutor")
 	public void run() {
-		Set<String> badTraceIdList = new HashSet<>(1000);
+		LOGGER.warn("--------------ClientSendWrongTraceIdThread start--------------");
+		Set<String> badTraceIdList = new HashSet<>();
 		while (true) {
 			try {
 				//Poll wrong trade id from queue

@@ -38,7 +38,7 @@ public class BackendGetWrongTraceData {
 	
 	@Async("asyncBackendGetWrongTraceDataExecutor")
 	public void run(BlockingQueue<TraceData> BACKEND_WRONG_TRACE_QUEUE, String clientPort) {
-		LOGGER.warn("BackendGetWrongTraceDataThread: " + clientPort);
+		LOGGER.warn("--------------BackendGetWrongTraceDataThread: " + clientPort + " started--------------");
 		
 		List<String> badTraceIdList = new ArrayList<String>();
 		while (true) {
