@@ -78,7 +78,7 @@ public class Utils {
     }
     
     public static String getPath(){
-        String port = Constants.CURRENT_PORT;
+        String port = Global.CURRENT_PORT;
         int targetPort = CommonController.getDataSourcePort();
         targetPort = 8080;											//temp fix for local testing. need to remove when submit
         if ("8000".equals(port)) {
@@ -91,6 +91,6 @@ public class Utils {
     }
     
     public static String getPort() {
-    	return Constants.CURRENT_PORT;
+    	return Global.CURRENT_PORT;
     }
 }

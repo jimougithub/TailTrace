@@ -8,12 +8,12 @@ import java.net.Proxy;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,20 +21,22 @@ import org.slf4j.LoggerFactory;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.TypeReference;
 import com.alibaba.tailbase.Constants;
+import com.alibaba.tailbase.Global;
 import com.alibaba.tailbase.Utils;
+import com.alibaba.tailbase.entity.TraceData;
 
-import okhttp3.FormBody;
 import okhttp3.Request;
-import okhttp3.RequestBody;
 import okhttp3.Response;
 
 
 public class ClientProcessData implements Runnable {
     private static final Logger LOGGER = LoggerFactory.getLogger(ClientProcessData.class.getName());
-    // an list of trace map,like ring buffe.  key is traceId, value is spans ,  r
+    // an list of trace map, like ring buffer. key is traceId, value is spans
     private static List<Map<String,List<String>>> BATCH_TRACE_LIST = new ArrayList<>();
+    // trace map for wrong trace data
+    private static Map<String, List<String>> WRONG_TREACE_MAP = new ConcurrentHashMap<>();
     
-    public static  void init() {
+    public static void init() {
         for (int i = 0; i < Constants.BATCH_COUNT; i++) {
             BATCH_TRACE_LIST.add(new ConcurrentHashMap<>(Constants.BATCH_SIZE));
         }
@@ -57,29 +59,36 @@ public class ClientProcessData implements Runnable {
             String line;
             long count = 0;
             int pos = 0;
-            Set<String> badTraceIdList = new HashSet<>(1000);
+            String wrongTraceID = "";
             Map<String, List<String>> traceMap = BATCH_TRACE_LIST.get(pos);
             
             //Start reading trace data from url
             while ((line = bf.readLine()) != null) {
-                count++;
                 String[] cols = line.split("\\|");
                 if (cols != null && cols.length > 1 ) {
+                	//Add into trace map
                     String traceId = cols[0];
                     List<String> spanList = traceMap.get(traceId);
                     if (spanList == null) {
+                    	count++;
                         spanList = new ArrayList<>();
                         traceMap.put(traceId, spanList);
                     }
                     spanList.add(line);
-                    if (cols.length > 8) {
+                    
+                    //Report wrong trace ID
+                    if (!wrongTraceID.equals("") && !traceId.equals(wrongTraceID)) {
+                    	reportWrongTrace(wrongTraceID, pos);
+                    	wrongTraceID = "";
+                    }
+                    
+                    //Check wrong trace spans
+                    if (cols.length > 8 && cols[8] != null) {
                         String tags = cols[8];
-                        if (tags != null) {
-                            if (tags.contains("error=1")) {
-                                badTraceIdList.add(traceId);
-                            } else if (tags.contains("http.status_code=") && tags.indexOf("http.status_code=200") < 0) {
-                                badTraceIdList.add(traceId);
-                            }
+                        if (tags.contains("error=1")) {
+                        	wrongTraceID = traceId;
+                        } else if (tags.contains("http.status_code=") && tags.indexOf("http.status_code=200") < 0) {
+                        	wrongTraceID = traceId;
                         }
                     }
                 }
@@ -93,52 +102,57 @@ public class ClientProcessData implements Runnable {
                     }
                     traceMap = BATCH_TRACE_LIST.get(pos);
                     // donot produce data, wait backend to consume data
-                    // TODO to use lock/notify
                     if (traceMap.size() > 0) {
                         while (true) {
+                        	LOGGER.warn("sleeping 10 million seconds");
                             Thread.sleep(10);
                             if (traceMap.size() == 0) {
                                 break;
                             }
                         }
                     }
-                    // batchPos begin from 0, so need to minus 1
-                    int batchPos = (int) count / Constants.BATCH_SIZE - 1;
-                    updateWrongTraceId(badTraceIdList, batchPos);
-                    badTraceIdList.clear();
-                    LOGGER.info("suc to updateBadTraceId, batchPos:" + batchPos);
                 }
             }
-            updateWrongTraceId(badTraceIdList, (int) (count / Constants.BATCH_SIZE - 1));
+            
+            //Report wrong trace ID
+            if (!wrongTraceID.equals("")) {
+            	reportWrongTrace(wrongTraceID, pos);
+            	wrongTraceID = "";
+            }
+            
             bf.close();
             input.close();
             callFinish();
         } catch (Exception e) {
-            LOGGER.warn("fail to process data", e);
+            LOGGER.error("fail to process data", e);
         }
     }
-
-    /**
-     *  call backend controller to update wrong tradeId list.
-     * @param badTraceIdList
-     * @param batchPos
-     */
-    private void updateWrongTraceId(Set<String> badTraceIdList, int batchPos) {
-        String json = JSON.toJSONString(badTraceIdList);
-        if (badTraceIdList.size() > 0) {
-            try {
-                LOGGER.info("updateBadTraceId, json:" + json + ", batch:" + batchPos);
-                RequestBody body = new FormBody.Builder()
-                        .add("traceIdListJson", json).add("batchPos", batchPos + "").build();
-                Request request = new Request.Builder().url("http://localhost:8002/setWrongTraceId").post(body).build();
-                Response response = Utils.callHttp(request);
-                response.close();
-            } catch (Exception e) {
-                LOGGER.warn("fail to updateBadTraceId, json:" + json + ", batch:" + batchPos);
-            }
-        }
+    
+    
+    //store and report wrong trace 
+    private void reportWrongTrace(String wrongTraceId, int pos) throws InterruptedException {
+    	//store wrong trace data
+    	List<String> wrongSpanList = BATCH_TRACE_LIST.get(pos).get(wrongTraceId);
+    	if (wrongSpanList==null) {
+    		int previous = pos - 1;
+    		if (previous < 0) {
+    			previous = Constants.BATCH_COUNT-1;
+    		}
+    		wrongSpanList = BATCH_TRACE_LIST.get(previous).get(wrongTraceId);
+    	}
+    	if (wrongSpanList != null) {
+    		WRONG_TREACE_MAP.put(wrongTraceId, wrongSpanList);
+    	} else {
+    		LOGGER.error("Cannot locate wrong trace data: "+ wrongTraceId);
+    	}
+    	
+    	//report wrong trace
+    	TraceData traceData = new TraceData();
+    	traceData.setTraceId(wrongTraceId);
+    	Global.CLIENT_WRONG_TRACE_QUEUE.put(traceData);
     }
 
+    
     // notify backend process when client process has finished.
     private void callFinish() {
         try {
@@ -149,51 +163,90 @@ public class ClientProcessData implements Runnable {
             LOGGER.warn("fail to callFinish");
         }
     }
-
-
-    public static String getWrongTracing(String wrongTraceIdList, int batchPos) {
-        LOGGER.info(String.format("getWrongTracing, batchPos:%d, wrongTraceIdList:\n %s" ,
-                batchPos, wrongTraceIdList));
+    
+    
+    public static String getWrongTracing(String wrongTraceIdList, String clientPort) {
+        LOGGER.info(String.format("getWrongTracing, clientPort:%s, wrongTraceIdList:\n %s", clientPort, wrongTraceIdList));
         List<String> traceIdList = JSON.parseObject(wrongTraceIdList, new TypeReference<List<String>>(){});
         Map<String,List<String>> wrongTraceMap = new HashMap<>();
-        int pos = batchPos % Constants.BATCH_COUNT;
-        int previous = pos - 1;
-        if (previous == -1) {
-            previous = Constants.BATCH_COUNT -1;
-        }
-        int next = pos + 1;
-        if (next == Constants.BATCH_COUNT) {
-            next = 0;
-        }
-        getWrongTraceWithBatch(previous, pos, traceIdList, wrongTraceMap);
-        getWrongTraceWithBatch(pos, pos, traceIdList,  wrongTraceMap);
-        getWrongTraceWithBatch(next, pos, traceIdList, wrongTraceMap);
-        // to clear spans, don't block client process thread. TODO to use lock/notify
-        BATCH_TRACE_LIST.get(previous).clear();
-        return JSON.toJSONString(wrongTraceMap);
-    }
-
-    private static void getWrongTraceWithBatch(int batchPos, int pos,  List<String> traceIdList, Map<String,List<String>> wrongTraceMap) {
-        // donot lock traceMap,  traceMap may be clear anytime.
-        Map<String, List<String>> traceMap = BATCH_TRACE_LIST.get(batchPos);
-        for (String traceId : traceIdList) {
-            List<String> spanList = traceMap.get(traceId);
-            if (spanList != null) {
-                // one trace may cross to batch (e.g batch size 20000, span1 in line 19999, span2 in line 20001)
-                List<String> existSpanList = wrongTraceMap.get(traceId);
-                if (existSpanList != null) {
-                    existSpanList.addAll(spanList);
-                } else {
-                    wrongTraceMap.put(traceId, spanList);
-                }
-                // output spanlist to check
-                String spanListString = spanList.stream().collect(Collectors.joining("\n"));
-                LOGGER.info(String.format("getWrongTracing, batchPos:%d, pos:%d, traceId:%s, spanList:\n %s",
-                        batchPos, pos,  traceId, spanListString));
+        
+        //Search wrong trace data
+        if (clientPort.equals(Utils.getPort())) {
+        	getSelfWrongTraceWithBatch(traceIdList, wrongTraceMap);
+        } else {
+        	long lastStartTime = getWrongTraceWithBatch(traceIdList, wrongTraceMap);
+            //Purge records if another client already poll the data
+            if (!wrongTraceMap.isEmpty() && lastStartTime>0) {
+            	purgeBatchTraceList(lastStartTime);
             }
         }
+        
+        return JSON.toJSONString(wrongTraceMap);
     }
-
     
+    //get wrong trace data report by itself
+    private static void getSelfWrongTraceWithBatch(List<String> traceIdList, Map<String,List<String>> wrongTraceMap) {
+		if (!WRONG_TREACE_MAP.isEmpty()) {
+	        for (String traceId : traceIdList) {
+	            List<String> spanList = WRONG_TREACE_MAP.get(traceId);
+	            if (spanList != null) {
+	            	wrongTraceMap.put(traceId, spanList);
+	            	WRONG_TREACE_MAP.remove(traceId);
+	            } else {
+	            	LOGGER.error("xxxxx getSelfWrongTraceWithBatch cannot get wrong trace data: " + traceId);
+	            }
+	        }
+		}
+    }
+    
+    //get wrong trace data report by another client
+    private static long getWrongTraceWithBatch(List<String> traceIdList, Map<String,List<String>> wrongTraceMap) {
+    	long lastStartTime = 0;
+		for (Map<String, List<String>> traceMap : BATCH_TRACE_LIST) {
+			if (traceMap.isEmpty()) {
+				continue;
+			}
+	        for (String traceId : traceIdList) {
+	            List<String> spanList = traceMap.get(traceId);
+	            if (spanList != null) {
+	            	wrongTraceMap.put(traceId, spanList);
+	                
+	                // log down the latest start time
+	                String[] cols = spanList.get(spanList.size()-1).split("\\|");
+	                lastStartTime = Long.parseLong(cols[1].trim());
+	            }
+	        }
+		}
+		return lastStartTime;
+    }
+    
+    //Purge those trace list base on the start time
+    private static void purgeBatchTraceList(long startTime) {
+		for (Map<String, List<String>> traceMap : BATCH_TRACE_LIST) {
+			if (traceMap.isEmpty()) {
+				continue;
+			}
+			
+			Set<Entry<String, List<String>>> entrySet=traceMap.entrySet();
+			Iterator<Entry<String, List<String>>> iteratorMap=entrySet.iterator();
+			Map.Entry<String, List<String>> traceList = null;
+			List<String> tailList = null;
+			boolean purge = true;
+			while(iteratorMap.hasNext() && purge){
+				traceList = iteratorMap.next();
+				tailList = traceList.getValue();
+				for (String item : tailList) {
+					String[] cols = item.split("\\|");
+					if (Long.parseLong(cols[1]) > startTime) {
+						purge = false;
+						break;
+					}
+				}
+			}
+			if (purge) {
+				traceMap.clear();
+			}
+		}
+    }
 
 }

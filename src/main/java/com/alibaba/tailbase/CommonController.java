@@ -1,15 +1,29 @@
 package com.alibaba.tailbase;
 
-import com.alibaba.tailbase.clientprocess.ClientProcessData;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.alibaba.tailbase.backendprocess.BackendGetWrongTraceData;
+import com.alibaba.tailbase.clientprocess.ClientProcessData;
+import com.alibaba.tailbase.clientprocess.ClientSendWrongTraceID;
+import com.alibaba.tailbase.config.AsyncConfig;
 
 
 @RestController
 public class CommonController {
 
   private static Integer DATA_SOURCE_PORT = 0;
+  
+  @Autowired
+  ClientSendWrongTraceID clientSendWrongTraceID;
+  
+  @Autowired
+  BackendGetWrongTraceData backendGetWrongTraceData;
+  
+  @Autowired
+  AsyncConfig asyncConfig;
 
   public static Integer getDataSourcePort() {
     return DATA_SOURCE_PORT;
@@ -17,6 +31,22 @@ public class CommonController {
 
   @RequestMapping("/ready")
   public String ready() {
+	//Start send wrong trace id thread
+	if (Utils.isClientProcess()) {
+		clientSendWrongTraceID.run();
+	}
+  	
+  	//Start get wrong trace thread
+  	if (Utils.isBackendProcess()) {
+  		for (int i=1; i<=asyncConfig.getBackendGetWrongTraceThreadCount(); i++) {
+  			if ((i % 2) != 0) {
+  				backendGetWrongTraceData.run(Global.BACKEND_WRONG_TRACE_QUEUE1, Constants.CLIENT_PROCESS_PORT1);
+  			} else {
+  				backendGetWrongTraceData.run(Global.BACKEND_WRONG_TRACE_QUEUE2, Constants.CLIENT_PROCESS_PORT2);
+  			}
+  		}
+  	}
+	
     return "suc";
   }
 

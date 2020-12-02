@@ -13,9 +13,9 @@ public class ClientController {
     private static final Logger LOGGER = LoggerFactory.getLogger(ClientProcessData.class.getName());
 
     @RequestMapping("/getWrongTrace")
-    public String getWrongTrace(@RequestParam String traceIdList, @RequestParam Integer batchPos) {
-        String json = ClientProcessData.getWrongTracing(traceIdList, batchPos);
-        LOGGER.info("suc to getWrongTrace, batchPos:" + batchPos);
+    public String getWrongTrace(@RequestParam String traceIdList, @RequestParam String clientPort) {
+        String json = ClientProcessData.getWrongTracing(traceIdList, clientPort);
+        LOGGER.info("suc to getWrongTrace, clientPort:" + clientPort);
         return json;
     }
 }
