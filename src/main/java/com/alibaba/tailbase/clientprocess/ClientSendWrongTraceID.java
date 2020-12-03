@@ -12,7 +12,6 @@ import org.springframework.stereotype.Service;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.tailbase.Global;
 import com.alibaba.tailbase.Utils;
-import com.alibaba.tailbase.entity.TraceData;
 
 import okhttp3.FormBody;
 import okhttp3.Request;
@@ -27,15 +26,14 @@ public class ClientSendWrongTraceID {
 	public void run() {
 		LOGGER.warn("--------------ClientSendWrongTraceIdThread start--------------");
 		Set<String> badTraceIdList = new HashSet<>();
+		String traceId = null;
 		while (true) {
 			try {
 				//Poll wrong trade id from queue
-				TraceData traceData = null;
-				traceData = Global.CLIENT_WRONG_TRACE_QUEUE.poll(60, TimeUnit.SECONDS);
-				while (traceData!=null) {
-					badTraceIdList.add(traceData.getTraceId());
-					traceData = null;
-					traceData = Global.CLIENT_WRONG_TRACE_QUEUE.poll();
+				traceId = Global.CLIENT_WRONG_TRACE_REPORT_QUEUE.poll(60, TimeUnit.SECONDS);
+				while (traceId!=null) {
+					badTraceIdList.add(traceId);
+					traceId = Global.CLIENT_WRONG_TRACE_REPORT_QUEUE.poll();
 				}
 				
 				//Send wrong trace id list to backend

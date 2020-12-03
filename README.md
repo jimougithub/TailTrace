@@ -6,10 +6,10 @@ put simple-http-server-1.0-SNAPSHOT.jar, scoring-1.0-SNAPSHOT.jar, tailbaseSampl
 
 CD D:\Tianchi\small  
 java -D"file.upload-dir"=D:/Tianchi/small -jar .\simple-http-server-1.0-SNAPSHOT.jar  
+java -D"server.port"=9000 -DcheckSumPath="D:/Tianchi/small/checkSum.data" -jar .\scoring-1.0-SNAPSHOT.jar  
 java -D"server.port"=8000 -jar .\tailbaseSampling-1.0-SNAPSHOT.jar  
 java -D"server.port"=8001 -jar .\tailbaseSampling-1.0-SNAPSHOT.jar  
 java -D"server.port"=8002 -jar .\tailbaseSampling-1.0-SNAPSHOT.jar  
-java -D"server.port"=9000 -DcheckSumPath="D:/Tianchi/small/checkSum.data" -jar .\scoring-1.0-SNAPSHOT.jar  
 
 ## flow chart
 ![enter image description here](https://tianchi-public.oss-cn-hangzhou.aliyuncs.com/public/files/forum/158937741003137571589377409737.png)

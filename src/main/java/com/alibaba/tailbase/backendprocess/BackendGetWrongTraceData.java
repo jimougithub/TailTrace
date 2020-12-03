@@ -24,7 +24,6 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.TypeReference;
 import com.alibaba.tailbase.Global;
 import com.alibaba.tailbase.Utils;
-import com.alibaba.tailbase.entity.TraceData;
 
 import okhttp3.FormBody;
 import okhttp3.Request;
@@ -37,19 +36,18 @@ public class BackendGetWrongTraceData {
 	String[] ports = new String[]{CLIENT_PROCESS_PORT1, CLIENT_PROCESS_PORT2};
 	
 	@Async("asyncBackendGetWrongTraceDataExecutor")
-	public void run(BlockingQueue<TraceData> BACKEND_WRONG_TRACE_QUEUE, String clientPort) {
+	public void run(BlockingQueue<String> BACKEND_WRONG_TRACE_QUEUE, String clientPort) {
 		LOGGER.warn("--------------BackendGetWrongTraceDataThread: " + clientPort + " started--------------");
 		
 		List<String> badTraceIdList = new ArrayList<String>();
+		String traceId = null;
 		while (true) {
 			try {
 				//poll wrong trade id from queue
-				TraceData traceData = null;
-				traceData = BACKEND_WRONG_TRACE_QUEUE.poll(60, TimeUnit.SECONDS);
-				while (traceData!=null) {
-					badTraceIdList.add(traceData.getTraceId());
-					traceData = null;
-					traceData = BACKEND_WRONG_TRACE_QUEUE.poll();
+				traceId = BACKEND_WRONG_TRACE_QUEUE.poll(60, TimeUnit.SECONDS);
+				while (traceId!=null) {
+					badTraceIdList.add(traceId);
+					traceId = BACKEND_WRONG_TRACE_QUEUE.poll();
 				}
 				
 				//Get wrong trace data by batch

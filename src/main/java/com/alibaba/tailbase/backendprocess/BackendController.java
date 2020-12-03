@@ -12,57 +12,49 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.TypeReference;
 import com.alibaba.tailbase.Constants;
 import com.alibaba.tailbase.Global;
-import com.alibaba.tailbase.entity.TraceData;
 
 @RestController
 public class BackendController {
-    private static final Logger LOGGER = LoggerFactory.getLogger(BackendController.class.getName());
-    private static volatile Integer FINISH_PROCESS_COUNT = 0;
+	private static final Logger LOGGER = LoggerFactory.getLogger(BackendController.class.getName());
+	private static volatile Integer FINISH_PROCESS_COUNT = 0;
 
-    public static  void init() {
-        
-    }
+	public static void init() {
+		
+	}
 
-    @RequestMapping("/setWrongTraceId")
-    public String setWrongTraceId(@RequestParam String traceIdListJson, @RequestParam String clientPort) {
-        List<String> traceIdList = JSON.parseObject(traceIdListJson, new TypeReference<List<String>>() {});
-        for (String traceId : traceIdList) {
-        	TraceData traceData = new TraceData();
-        	traceData.setTraceId(traceId);
-        	traceData.setClientPort(clientPort);
-        	try {
-        		if (clientPort.equals(Constants.CLIENT_PROCESS_PORT1)) {
-        			Global.BACKEND_WRONG_TRACE_QUEUE1.put(traceData);
-        		} else {
-        			Global.BACKEND_WRONG_TRACE_QUEUE2.put(traceData);
-        		}
+	@RequestMapping("/setWrongTraceId")
+	public String setWrongTraceId(@RequestParam String traceIdListJson, @RequestParam String clientPort) {
+		List<String> traceIdList = JSON.parseObject(traceIdListJson, new TypeReference<List<String>>() {});
+		for (String traceId : traceIdList) {
+			try {
+				if (clientPort.equals(Constants.CLIENT_PROCESS_PORT1)) {
+					Global.BACKEND_WRONG_TRACE_QUEUE1.put(traceId);
+				} else {
+					Global.BACKEND_WRONG_TRACE_QUEUE2.put(traceId);
+				}
 			} catch (InterruptedException e) {
 				LOGGER.error("write BACKEND_WRONG_TRACE_QUEUE error", e);
 			}
-        }
-        LOGGER.info(String.format("setWrongTraceId, clientPort:%s traceIdList:%s", clientPort, traceIdListJson));
-        return "suc";
-    }
+		}
+		LOGGER.info(String.format("setWrongTraceId, clientPort:%s traceIdList:%s", clientPort, traceIdListJson));
+		return "suc";
+	}
 
-    
-    @RequestMapping("/finish")
-    public String finish() {
-        FINISH_PROCESS_COUNT++;
-        LOGGER.warn("receive call 'finish', count:" + FINISH_PROCESS_COUNT);
-        return "suc";
-    }
+	@RequestMapping("/finish")
+	public String finish() {
+		FINISH_PROCESS_COUNT++;
+		LOGGER.warn("receive call 'finish', count:" + FINISH_PROCESS_COUNT);
+		return "suc";
+	}
 
-    /**
-     * trace batch will be finished, when client process has finished.(FINISH_PROCESS_COUNT == PROCESS_COUNT)
-     */
-   public static boolean isFinished() {
-       if (!Global.BACKEND_WRONG_TRACE_QUEUE1.isEmpty() 
-    		   || !Global.BACKEND_WRONG_TRACE_QUEUE2.isEmpty()) {
-    	   return false;
-       }
-       if (FINISH_PROCESS_COUNT < Constants.PROCESS_COUNT) {
-           return false;
-       }
-       return true;
-   }
+	// trace batch will be finished, when client process has finished.(FINISH_PROCESS_COUNT == PROCESS_COUNT)
+	public static boolean isFinished() {
+		if (!Global.BACKEND_WRONG_TRACE_QUEUE1.isEmpty() || !Global.BACKEND_WRONG_TRACE_QUEUE2.isEmpty()) {
+			return false;
+		}
+		if (FINISH_PROCESS_COUNT < Constants.PROCESS_COUNT) {
+			return false;
+		}
+		return true;
+	}
 }

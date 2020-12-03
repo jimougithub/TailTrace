@@ -2,6 +2,7 @@ package com.alibaba.tailbase;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.scheduling.annotation.EnableAsync;
 
@@ -31,7 +32,8 @@ public class MultiEntry {
             ClientProcessData.init();
         }
         
-        SpringApplication.run(MultiEntry.class, "--server.port=" + Global.CURRENT_PORT);
+        ConfigurableApplicationContext context = SpringApplication.run(MultiEntry.class, "--server.port=" + Global.CURRENT_PORT);
+        context.getBean(ControlService.class).startUp();
     }
 
 }
