@@ -68,6 +68,7 @@ public class ClientProcessData implements Runnable {
                 			traceMap = Global.BATCH_TRACE_LIST.get(pos);
                     		currentPos = pos;
                 		}
+                		locatePos = pos;
                 		Global.BATCH_TRACE_ID_POS_MAP.put(traceId, pos);
                 	} else {
                 		if (locatePos != pos) {
